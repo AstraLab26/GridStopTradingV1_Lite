@@ -20,6 +20,9 @@ input group "=== CÀI ĐẶT CHUNG ==="
 input int MagicNumber = 123456;                 // Magic number (phân biệt lệnh EA với lệnh tay/EA khác)
 input string CommentOrder = "Grid Stop V1";     // Comment trên lệnh (sẽ thêm " B")
 input bool EnableResetNotification = false;     // Gửi push notification khi EA reset/dừng
+input bool ScaleByAccountPercent = false;        // Đánh theo % tài khoản: vốn gốc = vốn lúc thêm EA; mỗi lần reset so sánh vốn hiện tại với vốn gốc
+input int ScaleByAccountPercentRate = 100;       // Tỷ lệ tăng theo vốn (%): 100=tăng đủ theo vốn, 50=vốn tăng 100% thì hàm số chỉ tăng 50%
+input double ScaleByAccountPercentMaxIncrease = 100.0;  // Giới hạn tăng tối đa (%): 100=tối đa +100% (dù vốn tăng bao nhiêu). 0=không giới hạn
 
 //--- Input parameters - Cài đặt lưới
 input group "=== CÀI ĐẶT LƯỚI ==="
@@ -44,7 +47,7 @@ input ENUM_TP_ACTION ActionOnTradingStopStepComplete = TP_ACTION_STOP_EA; // Khi
 //--- Input parameters - Cân bằng lệnh
 input group "=== CÂN BẰNG LỆNH ==="
 input bool EnableBalanceResetMode = false;      // Bật: đạt CẢ hai điều kiện → đóng hết, đặt gốc mới
-input double BalanceResetTotalOpenLot = 1.0;    // Điều kiện 1: Tổng lot mở ≥ X (0=bỏ qua)
+input int BalanceResetMinGridLevelsWithOpen = 3;  // Điều kiện 1 (ĐK lưới): Số bậc lưới có lệnh đang mở ≥ X (0=bỏ qua)
 input double BalanceResetSessionProfitUSD = 50.0; // Điều kiện 2: Lãi phiên ≥ X USD (0=bỏ qua)
 
 //--- Input parameters - Giờ hoạt động
@@ -100,7 +103,56 @@ double initialPriceForStop = 0.0;               // Giá ban đầu khi kích ho�
 bool firstStepDone = false;                     // Flag đã thực hiện step đầu tiên (đóng lệnh âm, set SL)
 bool isTradingStopBuyDirection = false;         // Hướng của Trading Stop (true=Buy, false=Sell)
 
+// Chế độ đánh theo % tài khoản: giá trị hiệu dụng ( = input * scale khi bật, = input khi tắt )
+double effectiveLotSizeStopB = 0.0;
+double effectiveTradingStopStepTotalProfit = 0.0;
+double effectiveTradingStopStepReturnProfitOpen = 0.0;
+double effectiveBalanceResetSessionProfitUSD = 0.0;
+double effectiveStopEALossUSD = 0.0;
+
 // NoPanel: không có panel - EA nhẹ chạy mượt
+
+//+------------------------------------------------------------------+
+//| Cập nhật 5 giá trị hiệu dụng theo % vốn. Vốn gốc = vốn lúc thêm EA vào biểu đồ (chỉ lưu 1 lần). |
+//| Mỗi lần (OnInit sau restart / sau reset) so sánh vốn hiện tại với vốn gốc → scale = current/ref_goc. |
+//| saveCurrentAsRef: true = lưu currentEquity làm vốn gốc (CHỈ khi chưa có ref - lần đầu thêm EA). |
+//+------------------------------------------------------------------+
+void UpdateEffectiveValuesByAccountPercent(double currentEquity, bool saveCurrentAsRef)
+{
+   double scale = 1.0;
+   if(ScaleByAccountPercent)
+   {
+      string refKey = "GSTLite_RefEquity_" + IntegerToString(MagicNumber);
+      double refEquity = GlobalVariableGet(refKey);  // Vốn gốc = vốn lúc thêm EA vào biểu đồ
+      if(refEquity > 0.001)
+         scale = currentEquity / refEquity;  // So sánh vốn hiện tại với vốn gốc
+      else
+         scale = 1.0;  // Lần đầu: chưa có vốn gốc → dùng mặc định input (hệ số 1)
+      // Tỷ lệ tăng: vốn tăng 100% (scale=2) với Rate=50 → hàm số chỉ tăng 50% (effective_scale=1.5)
+      double ratePct = MathMax(1, MathMin(100, (double)ScaleByAccountPercentRate)) / 100.0;
+      scale = 1.0 + (scale - 1.0) * ratePct;
+      // Giới hạn tăng tối đa: VD MaxIncrease=100% → scale tối đa = 2 (tăng tối đa 100%)
+      if(ScaleByAccountPercentMaxIncrease > 0)
+      {
+         double maxScale = 1.0 + ScaleByAccountPercentMaxIncrease / 100.0;
+         if(scale > maxScale)
+            scale = maxScale;
+      }
+      // Chỉ lưu vốn gốc khi lần đầu thêm EA (chưa có ref). Sau mỗi reset KHÔNG cập nhật ref.
+      if(saveCurrentAsRef && refEquity <= 0.001)
+      {
+         GlobalVariableSet(refKey, currentEquity);
+         Print("Đánh theo % tài khoản: Lần đầu thêm EA - đã lưu vốn gốc ", currentEquity, " (mặc định input, hệ số 1)");
+      }
+      else if(refEquity > 0.001)
+         Print("Đánh theo % tài khoản: Vốn gốc ", refEquity, " | Vốn hiện tại ", currentEquity, " | Hệ số (sau tỷ lệ/giới hạn): ", DoubleToString(scale, 4));
+   }
+   effectiveLotSizeStopB = LotSizeStopB * scale;
+   effectiveTradingStopStepTotalProfit = TradingStopStepTotalProfit * scale;
+   effectiveTradingStopStepReturnProfitOpen = TradingStopStepReturnProfitOpen * scale;
+   effectiveBalanceResetSessionProfitUSD = BalanceResetSessionProfitUSD * scale;
+   effectiveStopEALossUSD = StopEALossUSD * scale;
+}
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -119,16 +171,16 @@ int OnInit()
    Print("Đường gốc (tại thời điểm EA khởi động): ", basePrice);
    Print("Lưới: khoảng cách cố định | Bậc n cách gốc n×", GridDistancePips, " pips");
    Print("Lưới mỗi chiều: Stop (max ", MaxGridLevelsStopB, " levels) | Lot cố định | Tự động đặt lại lệnh chờ khi lệnh tại level đóng");
-   Print("--- Lệnh Stop: ON (lot ", LotSizeStopB, ") | Không dùng TP | Trading Stop từng lệnh: cách entry ", TradingStopStopBDistancePips, " pips đặt SL, step ", TradingStopStopBStepPips, " pips ---");
+   Print("--- Lệnh Stop: ON (lot ", effectiveLotSizeStopB, (ScaleByAccountPercent ? " theo % vốn" : ""), ") | Không dùng TP | Trading Stop từng lệnh: cách entry ", TradingStopStopBDistancePips, " pips đặt SL, step ", TradingStopStopBStepPips, " pips ---");
    Print("Tổng số levels: ", ArraySize(gridLevels));
    if(EnableBalanceResetMode)
    {
       string conds = "";
-      if(BalanceResetTotalOpenLot > 0) conds += "tổng lot mở >= " + DoubleToString(BalanceResetTotalOpenLot, 2);
-      if(BalanceResetSessionProfitUSD > 0)
+      if(BalanceResetMinGridLevelsWithOpen > 0) conds += "số bậc lưới có lệnh mở >= " + IntegerToString(BalanceResetMinGridLevelsWithOpen);
+      if(effectiveBalanceResetSessionProfitUSD > 0)
       {
          if(conds != "") conds += " và ";
-         conds += "lãi phiên >= " + DoubleToString(BalanceResetSessionProfitUSD, 0) + " USD";
+         conds += "lãi phiên >= " + DoubleToString(effectiveBalanceResetSessionProfitUSD, 0) + " USD";
       }
       if(conds != "")
          Print("--- Cân bằng lệnh: ON (", conds, " → đóng hết, chờ ĐK mới) ---");
@@ -136,12 +188,12 @@ int OnInit()
          Print("--- Cân bằng lệnh: ON (chưa cấu hình điều kiện) ---");
    }
    Print("--- Trading Stop, Step Tổng (theo lệnh mở) ---");
-   bool tradingStopEnabled = (EnableTradingStopStepTotal && TradingStopStepTotalProfit > 0);
+   bool tradingStopEnabled = (EnableTradingStopStepTotal && effectiveTradingStopStepTotalProfit > 0);
    if(tradingStopEnabled)
    {
       Print("Trading Stop, Step Tổng: ON (theo lệnh mở)");
-      Print("  - Lãi kích hoạt (lệnh mở): ", TradingStopStepTotalProfit, " USD");
-      Print("  - Lãi quay lại (lệnh mở): ", TradingStopStepReturnProfitOpen, " USD");
+      Print("  - Lãi kích hoạt (lệnh mở): ", effectiveTradingStopStepTotalProfit, " USD");
+      Print("  - Lãi quay lại (lệnh mở): ", effectiveTradingStopStepReturnProfitOpen, " USD");
       Print("  - Điểm A cách lệnh dương: ", TradingStopStepPointA, " pips");
       Print("  - Step di chuyển SL: ", TradingStopStepSize, " pips");
       Print("  - Hành động khi chạm SL: ", ActionOnTradingStopStepComplete == TP_ACTION_RESET_EA ? "Reset EA" : "Dừng EA");
@@ -152,8 +204,8 @@ int OnInit()
    }
    if(EnableStopEAAtAccumulatedProfit && StopEAAtAccumulatedProfitUSD > 0)
       Print("--- Dừng EA theo tích lũy lãi: ON (tích lũy >= ", StopEAAtAccumulatedProfitUSD, " USD thì dừng EA, đóng hết lệnh) ---");
-   if(EnableStopEAAtLossUSD && StopEALossUSD > 0)
-      Print("--- Dừng/Reset EA theo SL âm USD: ON (lỗ phiên >= ", StopEALossUSD, " USD → ", (StopEAAtLossUSDAction == TP_ACTION_RESET_EA ? "Reset EA" : "Dừng EA"), ") ---");
+   if(EnableStopEAAtLossUSD && effectiveStopEALossUSD > 0)
+      Print("--- Dừng/Reset EA theo SL âm USD: ON (lỗ phiên >= ", effectiveStopEALossUSD, " USD → ", (StopEAAtLossUSDAction == TP_ACTION_RESET_EA ? "Reset EA" : "Dừng EA"), ") ---");
    Print("--- Giờ hoạt động ---");
    if(EnableTradingHours)
    {
@@ -181,6 +233,9 @@ int OnInit()
    balanceAtMaxLoss = AccountInfoDouble(ACCOUNT_BALANCE);  // Khởi tạo số dư tại thời điểm lỗ lớn nhất
    maxLotEver = 0.0;  // Khởi tạo số lot lớn nhất từng có
    totalLotEver = 0.0;  // Khởi tạo tổng lot lớn nhất từng có
+   
+   // Chế độ đánh theo % tài khoản: lúc đầu dùng mặc định input (ref chưa có → scale=1); sau mỗi lần reset sẽ cập nhật ref và tính lại
+   UpdateEffectiveValuesByAccountPercent(initialEquity, true);
    
    Print("Vốn ban đầu phiên: ", initialEquity, " USD");
    
@@ -261,16 +316,16 @@ void OnTick()
    }
    
    // Dừng/Reset EA theo SL (âm X USD): Lỗ phiên (vốn khởi động - Equity) ≥ X USD
-   if(EnableStopEAAtLossUSD && StopEALossUSD > 0 && initialEquity > 0 && basePrice > 0)
+   if(EnableStopEAAtLossUSD && effectiveStopEALossUSD > 0 && initialEquity > 0 && basePrice > 0)
    {
       double currentEquity = AccountInfoDouble(ACCOUNT_EQUITY);
       double sessionLossUSD = initialEquity - currentEquity;
-      if(sessionLossUSD >= StopEALossUSD)
+      if(sessionLossUSD >= effectiveStopEALossUSD)
       {
          double accumulatedBefore = accumulatedProfit;
          string slReason = (StopEAAtLossUSDAction == TP_ACTION_STOP_EA) ? "SL âm USD - Dừng EA" : "SL âm USD - Reset EA";
          Print("========================================");
-         Print("=== SL ÂM USD KÍCH HOẠT: Lỗ phiên ", DoubleToString(sessionLossUSD, 2), " USD >= ", StopEALossUSD, " USD (vốn khởi động ", initialEquity, " → Equity ", currentEquity, ") ===");
+         Print("=== SL ÂM USD KÍCH HOẠT: Lỗ phiên ", DoubleToString(sessionLossUSD, 2), " USD >= ", effectiveStopEALossUSD, " USD (vốn khởi động ", initialEquity, " → Equity ", currentEquity, ") ===");
          if(StopEAAtLossUSDAction == TP_ACTION_STOP_EA)
          {
             CloseAllPendingOrders();
@@ -304,13 +359,13 @@ void OnTick()
    if(EnableBalanceResetMode && basePrice > 0 && !isTradingStopActive)
    {
       double sessionPr = AccountInfoDouble(ACCOUNT_EQUITY) - initialEquity;
-      double totalOpenLot = GetTotalLot();
-      bool cond1 = (BalanceResetTotalOpenLot <= 0) || (totalOpenLot >= BalanceResetTotalOpenLot);
-      bool cond2 = (BalanceResetSessionProfitUSD <= 0) || (sessionPr >= BalanceResetSessionProfitUSD);
-      bool hasAnyCond = (BalanceResetTotalOpenLot > 0) || (BalanceResetSessionProfitUSD > 0);
+      int countGridLevelsWithOpen = GetCountOfGridLevelsWithOpenOrders();
+      bool cond1 = (BalanceResetMinGridLevelsWithOpen <= 0) || (countGridLevelsWithOpen >= BalanceResetMinGridLevelsWithOpen);
+      bool cond2 = (effectiveBalanceResetSessionProfitUSD <= 0) || (sessionPr >= effectiveBalanceResetSessionProfitUSD);
+      bool hasAnyCond = (BalanceResetMinGridLevelsWithOpen > 0) || (effectiveBalanceResetSessionProfitUSD > 0);
       if(hasAnyCond && cond1 && cond2)
       {
-         Print("Cân bằng (ưu tiên trước gồng lãi): Tổng lot mở ", totalOpenLot, " | Lãi phiên ", sessionPr, " USD → Đóng hết, chờ ĐK mới.");
+         Print("Cân bằng (ưu tiên trước gồng lãi): Số bậc lưới có lệnh mở ", countGridLevelsWithOpen, " (≥ ", BalanceResetMinGridLevelsWithOpen, ") | Lãi phiên ", sessionPr, " USD → Đóng hết, chờ ĐK mới.");
          BalanceResetAndWaitForNewBase();
          return;
       }
@@ -662,6 +717,9 @@ void ResetEA(string resetReason = "Thủ công")
    // KHÔNG reset maxNegativeProfit và balanceAtMaxLoss - giữ lại để theo dõi lịch sử
    // KHÔNG reset maxLotEver và totalLotEver - giữ lại để theo dõi lịch sử
    
+   // Chế độ % tài khoản: so sánh vốn sau reset với vốn gốc (lúc thêm EA), tính lại 5 hàm số theo % (không đổi vốn gốc)
+   UpdateEffectiveValuesByAccountPercent(initialEquity, false);
+   
    // Đảm bảo EA tiếp tục hoạt động sau khi reset
    eaStopped = false;
    
@@ -914,6 +972,8 @@ void BalanceResetAndWaitForNewBase()
    firstStepDone = false;
    basePrice = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    InitializeGridLevels();
+   // Chế độ % tài khoản: so sánh vốn sau reset với vốn gốc (lúc thêm EA), tính lại 5 hàm số theo % (không đổi vốn gốc)
+   UpdateEffectiveValuesByAccountPercent(initialEquity, false);
    Print("Đã đặt đường gốc mới: ", basePrice, " → khởi động lại.");
    Print("========================================");
 }
@@ -1376,7 +1436,7 @@ double NormalizeVolumeBySymbol(double volume)
 void PlacePendingOrder(ENUM_ORDER_TYPE orderType, double priceLevel, int levelNumber, bool isStopA)
 {
    double price = NormalizeDouble(priceLevel, dgt);
-   double lotSize = LotSizeStopB;
+   double lotSize = effectiveLotSizeStopB;
    string orderComment = CommentOrder + " B";
    // Không dùng TP cho từng lệnh; chỉ dùng Trading Stop từng lệnh khi bật
    double tp = 0;
@@ -1420,6 +1480,32 @@ int GetGridLevelNumber(double price)
 }
 
 //+------------------------------------------------------------------+
+//| Đếm số bậc lưới có ít nhất một lệnh đang mở (tính theo level 1..MaxGridLevelsStopB) |
+//+------------------------------------------------------------------+
+int GetCountOfGridLevelsWithOpenOrders()
+{
+   bool levelHasOrder[];
+   ArrayResize(levelHasOrder, MaxGridLevelsStopB + 1);
+   for(int i = 0; i <= MaxGridLevelsStopB; i++)
+      levelHasOrder[i] = false;
+   for(int i = 0; i < PositionsTotal(); i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket <= 0) continue;
+      if(PositionGetInteger(POSITION_MAGIC) != MagicNumber || PositionGetString(POSITION_SYMBOL) != _Symbol)
+         continue;
+      double priceOpen = PositionGetDouble(POSITION_PRICE_OPEN);
+      int levelNum = GetGridLevelNumber(priceOpen);
+      if(levelNum >= 1 && levelNum <= MaxGridLevelsStopB)
+         levelHasOrder[levelNum] = true;
+   }
+   int count = 0;
+   for(int i = 1; i <= MaxGridLevelsStopB; i++)
+      if(levelHasOrder[i]) count++;
+   return count;
+}
+
+//+------------------------------------------------------------------+
 //| Lấy giá của mức lưới theo số mức và loại lệnh                  |
 //+------------------------------------------------------------------+
 double GetLevelPrice(int levelNumber, ENUM_ORDER_TYPE orderType)
@@ -1447,20 +1533,20 @@ double GetLevelPrice(int levelNumber, ENUM_ORDER_TYPE orderType)
 void CheckTradingStopStepTotal()
 {
    // Bản Lite: chỉ theo lệnh mở
-   if(TradingStopStepTotalProfit <= 0)
+   if(effectiveTradingStopStepTotalProfit <= 0)
       return;
    
    int buyCnt = 0, sellCnt = 0;
    double buyProfit = 0, sellProfit = 0, currentProfit = 0;
    GetPositionStats(buyCnt, sellCnt, buyProfit, sellProfit, currentProfit);
-   if(currentProfit >= TradingStopStepTotalProfit)
+   if(currentProfit >= effectiveTradingStopStepTotalProfit)
    {
       double currentPrice = SymbolInfoDouble(_Symbol, SYMBOL_BID);
       bool chosenBuy = (currentPrice >= basePrice);
       
       Print("========================================");
       Print("=== KÍCH HOẠT TRADING STOP, STEP TỔNG (theo lệnh mở) ===");
-      Print("Tổng lãi lệnh đang mở: ", currentProfit, " USD | Mức kích hoạt: ", TradingStopStepTotalProfit, " USD");
+      Print("Tổng lãi lệnh đang mở: ", currentProfit, " USD | Mức kích hoạt: ", effectiveTradingStopStepTotalProfit, " USD");
       Print("Giá hiện tại: ", currentPrice, " | Đường gốc: ", basePrice);
       Print("Hướng: ", chosenBuy ? "BUY" : "SELL");
       Print("========================================");
@@ -1689,8 +1775,8 @@ void ManageTradingStop()
       
       // Bản Lite: chỉ theo lệnh mở
       double currentProfit = openProfitVal;
-      double threshold = TradingStopStepTotalProfit;
-      double returnThreshold = TradingStopStepReturnProfitOpen;
+      double threshold = effectiveTradingStopStepTotalProfit;
+      double returnThreshold = effectiveTradingStopStepReturnProfitOpen;
       
       if(currentProfit < threshold)
       {
