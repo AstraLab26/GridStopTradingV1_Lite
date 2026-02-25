@@ -21,8 +21,8 @@ input int MagicNumber = 123456;                 // Magic number (phân biệt l�
 input string CommentOrder = "Grid Stop V1";     // Comment trên lệnh (sẽ thêm " B")
 input bool EnableResetNotification = false;     // Gửi push notification khi EA reset/dừng
 input bool ScaleByAccountPercent = false;        // Đánh theo % tài khoản: vốn gốc = vốn lúc thêm EA; mỗi lần reset so sánh vốn hiện tại với vốn gốc
-input int ScaleByAccountPercentRate = 100;       // Tỷ lệ tăng theo vốn (%): 100=tăng đủ theo vốn, 50=vốn tăng 100% thì hàm số chỉ tăng 50%
-input double ScaleByAccountPercentMaxIncrease = 100.0;  // Giới hạn tăng tối đa (%): 100=tối đa +100% (dù vốn tăng bao nhiêu). 0=không giới hạn
+input int ScaleByAccountPercentRate = 100;       // Tỷ lệ tăng theo vốn (%): 100=tăng đủ, 50=vốn tăng 100% thì hàm số tăng 50%. Giới hạn cao nhất 100% - để hơn cũng chỉ 100%
+input double ScaleByAccountPercentMaxIncrease = 100.0;  // Giới hạn tăng lot/hàm số (%): 0 hoặc >10000 = tối đa 10000%. Cài 1-10000 thì dùng giá trị đó; cài >10000 cũng chỉ 10000%
 
 //--- Input parameters - Cài đặt lưới
 input group "=== CÀI ĐẶT LƯỚI ==="
@@ -128,16 +128,16 @@ void UpdateEffectiveValuesByAccountPercent(double currentEquity, bool saveCurren
          scale = currentEquity / refEquity;  // So sánh vốn hiện tại với vốn gốc
       else
          scale = 1.0;  // Lần đầu: chưa có vốn gốc → dùng mặc định input (hệ số 1)
-      // Tỷ lệ tăng: vốn tăng 100% (scale=2) với Rate=50 → hàm số chỉ tăng 50% (effective_scale=1.5)
+      // Tỷ lệ tăng: tối đa 100%. Cài >100 cũng chỉ dùng 100%
       double ratePct = MathMax(1, MathMin(100, (double)ScaleByAccountPercentRate)) / 100.0;
       scale = 1.0 + (scale - 1.0) * ratePct;
-      // Giới hạn tăng tối đa: VD MaxIncrease=100% → scale tối đa = 2 (tăng tối đa 100%)
-      if(ScaleByAccountPercentMaxIncrease > 0)
-      {
-         double maxScale = 1.0 + ScaleByAccountPercentMaxIncrease / 100.0;
-         if(scale > maxScale)
-            scale = maxScale;
-      }
+      // Giới hạn tăng lot/hàm số: 0 hoặc >10000 = tối đa 10000%; cài 1-10000 dùng đúng giá trị; cài >10000 chỉ 10000%
+      double maxIncreasePct = ScaleByAccountPercentMaxIncrease;
+      if(maxIncreasePct <= 0 || maxIncreasePct > 10000.0)
+         maxIncreasePct = 10000.0;
+      double maxScale = 1.0 + maxIncreasePct / 100.0;
+      if(scale > maxScale)
+         scale = maxScale;
       // Chỉ lưu vốn gốc khi lần đầu thêm EA (chưa có ref). Sau mỗi reset KHÔNG cập nhật ref.
       if(saveCurrentAsRef && refEquity <= 0.001)
       {
@@ -366,7 +366,13 @@ void OnTick()
       if(hasAnyCond && cond1 && cond2)
       {
          Print("Cân bằng (ưu tiên trước gồng lãi): Số bậc lưới có lệnh mở ", countGridLevelsWithOpen, " (≥ ", BalanceResetMinGridLevelsWithOpen, ") | Lãi phiên ", sessionPr, " USD → Đóng hết, chờ ĐK mới.");
+         double accumulatedBefore = accumulatedProfit;
+         resetCount++;
          BalanceResetAndWaitForNewBase();
+         double accumulatedAfter = accumulatedProfit;
+         double profitThisTime = accumulatedAfter - accumulatedBefore;
+         if(EnableResetNotification)
+            SendResetNotification("Cân bằng lệnh", accumulatedBefore, profitThisTime, accumulatedAfter, resetCount);
          return;
       }
    }
