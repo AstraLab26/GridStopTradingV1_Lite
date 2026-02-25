@@ -28,7 +28,7 @@ input group "=== CÀI ĐẶT CHUNG ==="
 input int MagicNumber = 123456;                 // Magic number (phân biệt lệnh EA với lệnh tay/EA khác)
 input string CommentOrder = "Grid Stop V1";     // Comment trên lệnh (sẽ thêm " B")
 input bool EnableResetNotification = true;      // Gửi push notification khi EA reset/dừng
-input bool ScaleByAccountPercent = true;        // Đánh theo % tài khoản: vốn gốc = vốn lúc thêm EA; mỗi lần reset so sánh vốn hiện tại với vốn gốc
+input bool ScaleByAccountPercent = true;        // Đánh theo % tài khoản: thêm EA vào biểu đồ → lấy vốn lúc đó làm vốn gốc; mỗi lần EA reset so sánh vốn tăng/giảm bao nhiêu % so vốn gốc để tính lot và 4 ngưỡng USD
 input int ScaleByAccountPercentRate = 100;       // Tỷ lệ tăng theo vốn (%): mặc định 100. 100=tăng đủ, 50=vốn tăng 100% thì hàm số tăng 50%. Giới hạn cao nhất 100%
 input double ScaleByAccountPercentMaxIncrease = 0;      // Giới hạn tăng lot/hàm số (%): mặc định 0 (= trần 10000%). Cài 1-10000 dùng đúng; 0 hoặc >10000 = tối đa 10000%
 
@@ -121,9 +121,11 @@ double effectiveStopEALossUSD = 0.0;
 // NoPanel: không có panel - EA nhẹ chạy mượt
 
 //+------------------------------------------------------------------+
-//| Cập nhật 5 giá trị hiệu dụng theo % vốn. Vốn gốc = vốn lúc thêm EA vào biểu đồ (chỉ lưu 1 lần). |
-//| Mỗi lần (OnInit sau restart / sau reset) so sánh vốn hiện tại với vốn gốc → scale = current/ref_goc. |
-//| saveCurrentAsRef: true = lưu currentEquity làm vốn gốc (CHỈ khi chưa có ref - lần đầu thêm EA). |
+//| Cập nhật 5 giá trị hiệu dụng theo % vốn.                          |
+//| Khi THÊM EA VÀO BIỂU ĐỒ: lấy vốn lúc đó làm VỐN GỐC (chỉ lưu 1 lần). |
+//| Mỗi lần EA reset (hoặc khởi động lại): so sánh vốn hiện tại với vốn gốc → |
+//| vốn tăng/giảm bao nhiêu % thì dùng % đó để tính hệ số → lot và 4 ngưỡng USD. |
+//| saveCurrentAsRef: true = lưu vốn gốc CHỈ khi chưa có (lần đầu thêm EA).   |
 //+------------------------------------------------------------------+
 void UpdateEffectiveValuesByAccountPercent(double currentEquity, bool saveCurrentAsRef)
 {
@@ -133,9 +135,9 @@ void UpdateEffectiveValuesByAccountPercent(double currentEquity, bool saveCurren
       string refKey = "GSTLite_RefEquity_" + IntegerToString(MagicNumber);
       double refEquity = GlobalVariableGet(refKey);  // Vốn gốc = vốn lúc thêm EA vào biểu đồ
       if(refEquity > 0.001)
-         scale = currentEquity / refEquity;  // So sánh vốn hiện tại với vốn gốc
+         scale = currentEquity / refEquity;  // So với vốn gốc: tăng/giảm bao nhiêu % (scale>1 = tăng, scale<1 = giảm)
       else
-         scale = 1.0;  // Lần đầu: chưa có vốn gốc → dùng mặc định input (hệ số 1)
+         scale = 1.0;  // Lần đầu thêm EA: chưa có vốn gốc → dùng mặc định input (hệ số 1)
       // Tỷ lệ tăng: tối đa 100%. Cài >100 cũng chỉ dùng 100%
       double ratePct = MathMax(1, MathMin(100, (double)ScaleByAccountPercentRate)) / 100.0;
       scale = 1.0 + (scale - 1.0) * ratePct;
@@ -146,14 +148,17 @@ void UpdateEffectiveValuesByAccountPercent(double currentEquity, bool saveCurren
       double maxScale = 1.0 + maxIncreasePct / 100.0;
       if(scale > maxScale)
          scale = maxScale;
-      // Chỉ lưu vốn gốc khi lần đầu thêm EA (chưa có ref). Sau mỗi reset KHÔNG cập nhật ref.
+      // Chỉ lưu vốn gốc khi lần đầu thêm EA vào biểu đồ (chưa có ref). Sau mỗi reset KHÔNG đổi vốn gốc.
       if(saveCurrentAsRef && refEquity <= 0.001)
       {
          GlobalVariableSet(refKey, currentEquity);
-         Print("Đánh theo % tài khoản: Lần đầu thêm EA - đã lưu vốn gốc ", currentEquity, " (mặc định input, hệ số 1)");
+         Print("Đánh theo % tài khoản: Thêm EA vào biểu đồ - đã lấy vốn lúc này làm vốn gốc ", currentEquity, " (mặc định input, hệ số 1)");
       }
       else if(refEquity > 0.001)
-         Print("Đánh theo % tài khoản: Vốn gốc ", refEquity, " | Vốn hiện tại ", currentEquity, " | Hệ số (sau tỷ lệ/giới hạn): ", DoubleToString(scale, 4));
+      {
+         double pctChange = (currentEquity / refEquity - 1.0) * 100.0;  // % tăng/giảm so vốn gốc
+         Print("Đánh theo % tài khoản: Vốn gốc (lúc thêm EA) ", refEquity, " | Vốn hiện tại ", currentEquity, " | Tăng/giảm ", DoubleToString(pctChange, 2), "% so vốn gốc | Hệ số: ", DoubleToString(scale, 4));
+      }
    }
    effectiveLotSizeStopB = LotSizeStopB * scale;
    effectiveTradingStopStepTotalProfit = TradingStopStepTotalProfit * scale;
