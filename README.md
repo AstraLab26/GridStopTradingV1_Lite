@@ -56,8 +56,8 @@ Các nhóm input hiển thị theo thứ tự:
 | **Comment** | string | Comment trên lệnh; EA tự thêm hậu tố `" B"` (ví dụ: "Grid Stop V1 B"). |
 | **Gửi push notification khi EA reset/dừng** | bool | Bật: gửi thông báo đến điện thoại khi EA reset hoặc dừng (cần bật push trong MT5: Tools → Options → Notifications). |
 | **Đánh theo % tài khoản** | bool | **Bật:** Vốn gốc = vốn (Equity) lúc **thêm EA vào biểu đồ** (chỉ lưu một lần). Sau mỗi lần EA reset hoặc khởi động lại, so sánh vốn hiện tại với vốn gốc → tính hệ số áp dụng cho 5 giá trị (lot + 4 ngưỡng USD). **Tắt:** Luôn dùng đúng giá trị input, không scale. |
-| **Tỷ lệ tăng theo vốn (%)** | int (1–100) | Chỉ áp dụng khi bật **Đánh theo % tài khoản**. **100** = tăng đủ theo vốn (hệ số = vốn hiện tại / vốn gốc). **50** = vốn tăng 100% thì các hàm số chỉ tăng 50%. **30** = vốn tăng 100% thì các hàm số chỉ tăng 30%. Công thức: hệ số áp dụng = 1 + (hệ số thô − 1) × (Tỷ lệ / 100). |
-| **Giới hạn tăng tối đa (%)** | double | Chỉ áp dụng khi bật **Đánh theo % tài khoản**. Giới hạn tăng tối đa của các hàm số. **100** = tối đa tăng 100% (hệ số áp dụng ≤ 2), dù vốn tăng rất lớn. **0** = không giới hạn. |
+| **Tỷ lệ tăng theo vốn (%)** | int | Chỉ áp dụng khi bật **Đánh theo % tài khoản**. **100** = tăng đủ theo vốn. **50** = vốn tăng 100% thì các hàm số chỉ tăng 50%. **Tối đa 100%**: cài >100 cũng chỉ dùng 100%. |
+| **Giới hạn tăng tối đa (%)** | double | Chỉ áp dụng khi bật **Đánh theo % tài khoản**. Giới hạn tăng lot và các hàm số. **0** hoặc **>10000** = tối đa **10.000%**. Cài 1–10.000 thì dùng đúng giá trị; cài >10.000 cũng chỉ 10.000%. |
 
 ---
 
@@ -164,7 +164,8 @@ Khi bật **Đánh theo % tài khoản** (trong Cài đặt chung):
    - Rate = 50 → vốn tăng 100% (scale_raw = 2) → scale = 1,5 (các hàm số tăng 50%).  
    - Rate = 30 → vốn tăng 100% → scale = 1,3 (các hàm số tăng 30%).
 3. **Giới hạn tăng tối đa (MaxIncrease %):**  
-   Nếu MaxIncrease > 0: `scale = min(scale, 1 + MaxIncrease/100)`.  
+   MaxIncrease = 0 hoặc >10000 → dùng 10.000%; 1–10.000 → dùng đúng giá trị; >10.000 → chỉ 10.000%.  
+   `scale = min(scale, 1 + MaxIncrease/100)` (tối đa scale = 101 tương ứng +10.000%).  
    VD MaxIncrease = 100% → scale tối đa = 2 (các hàm số tối đa tăng 100%).
 
 ### Năm giá trị được scale
