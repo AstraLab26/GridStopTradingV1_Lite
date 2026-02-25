@@ -1,26 +1,74 @@
 # Grid Stop Trading V1 – Bản Lite
 
-EA lưới **chỉ lệnh Stop** (Buy Stop / Sell Stop) trên MetaTrader 5 – bản **ngắn gọn, tối ưu**: lot cố định mọi bậc, **không dùng TP từng lệnh**, **gồng lãi từng lệnh luôn bật**, gồng lãi tổng **chỉ theo lệnh mở**, dừng EA **chỉ theo âm USD** (không có SL %).
+**Grid Stop Trading** · Phiên bản Lite 1.0
+
+EA lưới **chỉ lệnh Stop** (Buy Stop / Sell Stop) trên MetaTrader 5 – bản **ngắn gọn, tối ưu**: lot cố định mọi bậc, **không dùng TP từng lệnh**, **gồng lãi từng lệnh luôn bật**, gồng lãi tổng **chỉ theo lệnh mở**, **dừng/Reset theo âm USD** (không có SL %).
 
 **File EA:** `GridStopTradingV1_Lite.mq5`
 
 ---
 
+## Giới thiệu
+
+Bản **Lite** tập trung vào:
+
+- **Chỉ lệnh Stop (lot cố định):** Mọi bậc lưới dùng cùng một lot; không TP từng lệnh, đóng lệnh nhờ gồng lãi từng lệnh hoặc khi reset/dừng.
+- **Gồng lãi tổng theo lệnh mở:** Khi tổng lãi lệnh đang mở đạt ngưỡng → EA đặt SL điểm A, gồng theo step; khi giá chạm SL → Dừng EA hoặc Reset EA (đặt gốc mới).
+- **Dừng/Reset theo âm USD:** Khi lỗ phiên (so vốn khởi động) ≥ X USD → Dừng EA hoặc Reset EA. Không dùng SL % lỗ.
+
+Phù hợp khi bạn chỉ cần lưới Stop đơn giản, gồng lãi từng lệnh và bảo vệ tài khoản theo âm USD.
+
+---
+
+## Thông số mặc định cho BTC/USD
+
+Gợi ý cài đặt khi chạy **BTC/USD** với **vốn 50.000 USD** hoặc **50.000 cent** (tài khoản cent). Có thể bật **Đánh theo % tài khoản** để lot và các ngưỡng USD tự scale theo vốn.
+
+| Nhóm | Input | Gợi ý (50.000 USD / 50.000 cent) |
+|------|--------|-----------------------------------|
+| **Cài đặt chung** | Gửi push notification | true |
+| | Đánh theo % tài khoản | true |
+| | Tỷ lệ tăng theo vốn (%) | 100 |
+| | Giới hạn tăng lot/hàm số (%) | 0 (= trần 10.000%) |
+| **Lưới** | Khoảng cách lưới (pips) | 1500 (hoặc chỉnh theo biên độ BTC) |
+| | Số bậc lưới tối đa mỗi chiều | 10 |
+| **Lệnh Stop** | Lot cố định | 1 (hoặc 0,01–0,1 tùy broker; cent: có thể 0,1–1) |
+| | Gồng lãi từng lệnh: cách entry (pips) | 300 |
+| | Mỗi X pips dịch SL | 100 |
+| **Trading Stop Step Tổng** | Bật | true |
+| | Lãi lệnh mở ≥ X USD | 120 |
+| | Hủy gồng nếu lãi lệnh mở < X USD | 100 |
+| | Điểm A (pips) | 2000 |
+| | Step (pips) | 1000 |
+| | Khi giá chạm SL | Reset EA |
+| **Cân bằng lệnh** | Bật | true |
+| | ĐK lưới ≥ X | 3 |
+| | Lãi phiên ≥ X USD | 150 |
+| **Dừng EA** | Dừng/Reset khi phiên lỗ | true |
+| | Lỗ phiên (USD) | 3000 (50k USD) / 3000 cent (50k cent) |
+| | Khi kích hoạt SL âm USD | Reset EA |
+
+**Lưu ý:** Với tài khoản **cent**, số dư 50.000 cent = 500 USD quy đổi; các ngưỡng USD trong EA nhập theo đơn vị tài khoản (cent thì 3000 = 3000 cent). Điều chỉnh khoảng cách lưới (pips) và lot theo quy định broker cho BTC/USD và khẩu vị rủi ro.
+
+---
+
 ## Mục lục
 
-1. [Tổng quan](#tổng-quan)
-2. [Thứ tự input trong EA](#thứ-tự-input-trong-ea)
-3. [Cài đặt chung](#1-cài-đặt-chung)
-4. [Cài đặt lưới](#2-cài-đặt-lưới)
-5. [Cài đặt lệnh Stop](#3-cài-đặt-lệnh-stop)
-6. [Trading Stop Step Tổng](#4-trading-stop-step-tổng-gồng-lãi-theo-lệnh-mở)
-7. [Cân bằng lệnh](#5-cân-bằng-lệnh)
-8. [Giờ hoạt động](#6-giờ-hoạt-động)
-9. [Dừng EA](#7-dừng-ea)
-10. [Chế độ Đánh theo % tài khoản](#chế-độ-đánh-theo--tài-khoản) — gồm [Giải thích hai thông số: Tỷ lệ và Giới hạn](#giải-thích-hai-thông-số-tỷ-lệ-và-giới-hạn)
-11. [Luồng xử lý và ưu tiên](#luồng-xử-lý-và-ưu-tiên)
-12. [So với bản đầy đủ](#so-với-bản-đầy-đủ)
-13. [Yêu cầu và cài đặt](#yêu-cầu-và-cài-đặt)
+1. [Giới thiệu](#giới-thiệu)
+2. [Thông số mặc định cho BTC/USD](#thông-số-mặc-định-cho-btcusd)
+3. [Tổng quan](#tổng-quan)
+4. [Thứ tự input trong EA](#thứ-tự-input-trong-ea)
+5. [Cài đặt chung](#1-cài-đặt-chung)
+6. [Cài đặt lưới](#2-cài-đặt-lưới)
+7. [Cài đặt lệnh Stop](#3-cài-đặt-lệnh-stop)
+8. [Trading Stop Step Tổng](#4-trading-stop-step-tổng-gồng-lãi-theo-lệnh-mở)
+9. [Cân bằng lệnh](#5-cân-bằng-lệnh)
+10. [Giờ hoạt động](#6-giờ-hoạt-động)
+11. [Dừng EA](#7-dừng-ea)
+12. [Chế độ Đánh theo % tài khoản](#chế-độ-đánh-theo--tài-khoản) — gồm [Giải thích hai thông số: Tỷ lệ và Giới hạn](#giải-thích-hai-thông-số-tỷ-lệ-và-giới-hạn)
+13. [Luồng xử lý và ưu tiên](#luồng-xử-lý-và-ưu-tiên)
+14. [So với bản đầy đủ](#so-với-bản-đầy-đủ)
+15. [Yêu cầu và cài đặt](#yêu-cầu-và-cài-đặt)
 
 ---
 
