@@ -68,7 +68,7 @@ Gợi ý cài đặt khi chạy **BTC/USD** với **vốn 50.000 USD** hoặc **
 12. [Chế độ Đánh theo % tài khoản](#chế-độ-đánh-theo--tài-khoản) — gồm [Giải thích hai thông số: Tỷ lệ và Giới hạn](#giải-thích-hai-thông-số-tỷ-lệ-và-giới-hạn)
 13. [Luồng xử lý và ưu tiên](#luồng-xử-lý-và-ưu-tiên)
 14. [So với bản đầy đủ](#so-với-bản-đầy-đủ)
-15. [Yêu cầu và cài đặt](#yêu-cầu-và-cài-đặt)
+15. [Yêu cầu và cài đặt](#yêu-cầu-và-cài-đặt) — gồm [Push notification](#push-notification-khi-ea-resetdừng), [Giá trị mặc định trong EA](#giá-trị-mặc-định-trong-ea), [Gợi ý sử dụng](#gợi-ý-sử-dụng)
 
 ---
 
@@ -103,7 +103,7 @@ Các nhóm input hiển thị theo thứ tự:
 | **Magic Number** | int | Dùng để phân biệt lệnh do EA với lệnh tay hoặc EA khác. Mỗi EA/symbol nên dùng magic riêng. |
 | **Comment** | string | Comment trên lệnh; EA tự thêm hậu tố `" B"` (ví dụ: "Grid Stop V1 B"). |
 | **Gửi push notification khi EA reset/dừng** | bool | Bật: gửi thông báo đến điện thoại khi EA reset hoặc dừng (cần bật push trong MT5: Tools → Options → Notifications). |
-| **Đánh theo % tài khoản** | bool | **Bật:** Vốn gốc = vốn (Equity) lúc **thêm EA vào biểu đồ** (chỉ lưu một lần). Sau mỗi lần EA reset hoặc khởi động lại, so sánh vốn hiện tại với vốn gốc → tính hệ số áp dụng cho 5 giá trị (lot + 4 ngưỡng USD). **Tắt:** Luôn dùng đúng giá trị input, không scale. |
+| **Đánh theo % tài khoản** | bool | **Bật:** Khi **thêm EA vào biểu đồ** lấy vốn lúc đó làm **vốn gốc**. Mỗi lần EA reset so sánh vốn tăng/giảm bao nhiêu % so vốn gốc → dùng % đó để tính lot và 4 ngưỡng USD. **Tắt:** Luôn dùng đúng giá trị input. |
 | **Tỷ lệ tăng theo vốn (%)** | int | Xem [Giải thích hai thông số](#giải-thích-hai-thông-số-tỷ-lệ-và-giới-hạn) bên dưới. **Giới hạn cao nhất 100%** — cài hơn cũng chỉ 100%. |
 | **Giới hạn tăng lot/hàm số (%)** | double | Xem [Giải thích hai thông số](#giải-thích-hai-thông-số-tỷ-lệ-và-giới-hạn) bên dưới. **Tối đa 10.000%** — cài 0 hoặc >10.000 đều chỉ 10.000%. |
 
@@ -200,8 +200,8 @@ Khi bật **Đánh theo % tài khoản** (trong Cài đặt chung):
 
 ### Vốn gốc
 
-- **Thêm EA vào biểu đồ** (lần đầu): Equity lúc đó được lưu làm **vốn gốc** (một lần duy nhất, lưu trong GlobalVariable theo Magic). Lúc này các hàm số dùng đúng giá trị input (hệ số = 1).
-- **Vốn gốc không đổi** khi EA reset: mỗi lần reset hoặc khởi động lại, so sánh **vốn hiện tại** với **vốn gốc** (vốn lúc thêm EA), **không** cập nhật vốn gốc.
+- **Khi thêm EA vào biểu đồ:** Lấy **vốn lúc đó** (Equity) làm **vốn gốc** — lưu một lần duy nhất (GlobalVariable theo Magic). Lúc này lot và 4 ngưỡng USD dùng đúng giá trị input (hệ số = 1).
+- **Vốn gốc không đổi** khi EA reset: sau mỗi lần reset (hoặc khởi động lại), EA so sánh **vốn hiện tại** với **vốn gốc** → vốn **tăng hay giảm bao nhiêu %** so với vốn gốc thì dùng đúng % đó để tính hệ số cho lot và 4 ngưỡng USD. Vốn gốc **không** được cập nhật khi reset.
 
 ### Giải thích hai thông số: Tỷ lệ và Giới hạn
 
@@ -227,7 +227,7 @@ Khi bật **Đánh theo % tài khoản** (trong Cài đặt chung):
 
 ### Công thức
 
-1. **Hệ số thô:** `scale_raw = Vốn hiện tại / Vốn gốc` (nếu chưa có vốn gốc thì coi scale_raw = 1).
+1. **Hệ số thô:** `scale_raw = Vốn hiện tại / Vốn gốc` — phản ánh vốn **tăng hay giảm bao nhiêu %** so với vốn gốc (vốn lúc thêm EA vào biểu đồ). Chưa có vốn gốc thì coi scale_raw = 1.
 2. **Tỷ lệ tăng theo vốn (Rate %):**  
    `scale = 1 + (scale_raw − 1) × (Rate / 100)`  
    — Rate bị giới hạn **tối đa 100%** (cài >100 vẫn chỉ 100).
@@ -302,8 +302,22 @@ Trong mỗi tick (khi EA chưa dừng):
 2. Mở MetaEditor → mở file → biên dịch (F7).
 3. Trong MT5: gắn EA lên chart → bật **Allow Algo Trading** → cấu hình input theo nhu cầu.
 
+### Push notification khi EA reset/dừng
+
+Khi bật **Gửi push notification khi EA reset/dừng**, tin nhắn gửi khi:
+
+- **Reset do Cân bằng lệnh** (đủ ĐK lưới + lãi phiên)
+- **Reset do Trading Stop** (giá chạm SL → Reset EA)
+- **Dừng/Reset do SL âm USD**
+
+Nội dung: Biểu đồ (symbol), Chức năng (lý do reset/dừng), Số dư, Tích lũy (lần N: trước + lần này = sau), Lỗ lớn nhất (số tiền / vốn %), Lot (max/tổng). Đơn vị tiền format K/M (vd. 12.50K$).
+
+### Giá trị mặc định trong EA
+
+Khi gắn EA lần đầu (chưa lưu set), các input mặc định tương ứng gợi ý cho **BTC/USD** (vốn 50.000 USD hoặc 50.000 cent): push notification = true, Đánh theo % tài khoản = true, lưới 1500 pips / 10 bậc, lot 1, gồng từng lệnh 300/100 pips, Trading Stop Tổng bật 120/100 USD / 2000/1000 pips / Reset EA, Cân bằng bật 3 bậc / 150 USD, Dừng EA theo âm USD bật 3000 / Reset EA. Có thể chỉnh lại theo symbol và rủi ro.
+
 ### Gợi ý sử dụng
 
 - Bản Lite không có panel; code gọn, phù hợp khi chỉ cần lưới Stop đơn giản, gồng lãi từng lệnh và dừng theo âm USD.
 - Dùng **Magic Number** khác nhau nếu chạy nhiều EA hoặc nhiều symbol.
-- Chế độ **Đánh theo % tài khoản** dùng vốn gốc lúc thêm EA; muốn đổi vốn gốc thì gỡ EA và gắn lại (hoặc xóa GlobalVariable tương ứng).
+- **Đánh theo % tài khoản:** vốn gốc = vốn lúc **thêm EA vào biểu đồ**; muốn đổi vốn gốc thì gỡ EA và gắn lại (hoặc xóa GlobalVariable tương ứng).
