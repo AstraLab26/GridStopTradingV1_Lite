@@ -28,6 +28,7 @@ Gợi ý cài đặt khi chạy **BTC/USD** với **vốn 50.000 USD** hoặc **
 |------|--------|-----------------------------------|
 | **Cài đặt chung** | Gửi push notification | true |
 | | Đánh theo % tài khoản | true |
+| | Vốn gốc | 0 (tự lấy lúc thêm EA) hoặc 50000 (cent) để so sánh cố định với 50.000 |
 | | Tỷ lệ tăng theo vốn (%) | 100 |
 | | Giới hạn tăng lot/hàm số (%) | 0 (= trần 10.000%) |
 | **Lưới** | Khoảng cách lưới (pips) | 1500 (hoặc chỉnh theo biên độ BTC) |
@@ -103,7 +104,8 @@ Các nhóm input hiển thị theo thứ tự:
 | **Magic Number** | int | Dùng để phân biệt lệnh do EA với lệnh tay hoặc EA khác. Mỗi EA/symbol nên dùng magic riêng. |
 | **Comment** | string | Comment trên lệnh; EA tự thêm hậu tố `" B"` (ví dụ: "Grid Stop V1 B"). |
 | **Gửi push notification khi EA reset/dừng** | bool | Bật: gửi thông báo đến điện thoại khi EA reset hoặc dừng (cần bật push trong MT5: Tools → Options → Notifications). |
-| **Đánh theo % tài khoản** | bool | **Bật:** Khi **thêm EA vào biểu đồ** lấy vốn lúc đó làm **vốn gốc**. Mỗi lần EA reset so sánh vốn tăng/giảm bao nhiêu % so vốn gốc → dùng % đó để tính lot và 4 ngưỡng USD. **Tắt:** Luôn dùng đúng giá trị input. |
+| **Đánh theo % tài khoản** | bool | **Bật:** EA so sánh vốn hiện tại với **vốn gốc** (xem input Vốn gốc) → % tăng/giảm để tính lot và 4 ngưỡng USD. **Tắt:** Luôn dùng đúng giá trị input. |
+| **Vốn gốc** | double | **0** = tự lấy vốn lúc **thêm EA vào biểu đồ** làm vốn gốc (lưu 1 lần). **>0** = dùng giá trị cài làm vốn gốc (VD 50000 cent → EA so sánh vốn hiện tại với 50000; vốn giảm 20% thì lot và các hàm số giảm 20% theo). |
 | **Tỷ lệ tăng theo vốn (%)** | int | Xem [Giải thích hai thông số](#giải-thích-hai-thông-số-tỷ-lệ-và-giới-hạn) bên dưới. **Giới hạn cao nhất 100%** — cài hơn cũng chỉ 100%. |
 | **Giới hạn tăng lot/hàm số (%)** | double | Xem [Giải thích hai thông số](#giải-thích-hai-thông-số-tỷ-lệ-và-giới-hạn) bên dưới. **Tối đa 10.000%** — cài 0 hoặc >10.000 đều chỉ 10.000%. |
 
@@ -200,8 +202,12 @@ Khi bật **Đánh theo % tài khoản** (trong Cài đặt chung):
 
 ### Vốn gốc
 
-- **Khi thêm EA vào biểu đồ:** Lấy **vốn lúc đó** (Equity) làm **vốn gốc** — lưu một lần duy nhất (GlobalVariable theo Magic). Lúc này lot và 4 ngưỡng USD dùng đúng giá trị input (hệ số = 1).
-- **Vốn gốc không đổi** khi EA reset: sau mỗi lần reset (hoặc khởi động lại), EA so sánh **vốn hiện tại** với **vốn gốc** → vốn **tăng hay giảm bao nhiêu %** so với vốn gốc thì dùng đúng % đó để tính hệ số cho lot và 4 ngưỡng USD. Vốn gốc **không** được cập nhật khi reset.
+Có **hai cách** chọn vốn gốc (input **Vốn gốc**):
+
+1. **Vốn gốc = 0 (mặc định):** EA **tự lấy vốn lúc thêm EA vào biểu đồ** làm vốn gốc — lưu một lần (GlobalVariable). Vốn gốc không đổi khi reset.
+2. **Vốn gốc > 0 (cài tay):** EA dùng **đúng giá trị bạn cài** làm vốn gốc (VD **50.000 cent**). Mỗi lần khởi động hoặc reset, EA so sánh vốn hiện tại (Equity) với 50.000 → tính vốn **tăng hay giảm bao nhiêu %** → lot và 4 ngưỡng USD scale theo (vốn giảm 20% thì các hàm số giảm 20% theo tỷ lệ đã cài).
+
+**Ví dụ (vốn gốc cài 50.000 cent):** Vốn thực tế 40.000 cent → EA tính giảm 20% so vốn gốc 50.000 → hệ số 0,8 → lot và 4 ngưỡng USD = input × 0,8. Vốn thực tế 60.000 cent → tăng 20% → hệ số 1,2 → lot và ngưỡng = input × 1,2.
 
 ### Giải thích hai thông số: Tỷ lệ và Giới hạn
 
@@ -227,7 +233,7 @@ Khi bật **Đánh theo % tài khoản** (trong Cài đặt chung):
 
 ### Công thức
 
-1. **Hệ số thô:** `scale_raw = Vốn hiện tại / Vốn gốc` — phản ánh vốn **tăng hay giảm bao nhiêu %** so với vốn gốc (vốn lúc thêm EA vào biểu đồ). Chưa có vốn gốc thì coi scale_raw = 1.
+1. **Hệ số thô:** `scale_raw = Vốn hiện tại / Vốn gốc`. Vốn gốc = input **Vốn gốc** nếu > 0, ngược lại = vốn lúc thêm EA vào biểu đồ. scale_raw phản ánh vốn tăng/giảm bao nhiêu % so vốn gốc. Chưa có vốn gốc thì coi scale_raw = 1.
 2. **Tỷ lệ tăng theo vốn (Rate %):**  
    `scale = 1 + (scale_raw − 1) × (Rate / 100)`  
    — Rate bị giới hạn **tối đa 100%** (cài >100 vẫn chỉ 100).
