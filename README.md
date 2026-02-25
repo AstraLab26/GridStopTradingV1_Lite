@@ -17,7 +17,7 @@ EA lưới **chỉ lệnh Stop** (Buy Stop / Sell Stop) trên MetaTrader 5 – b
 7. [Cân bằng lệnh](#5-cân-bằng-lệnh)
 8. [Giờ hoạt động](#6-giờ-hoạt-động)
 9. [Dừng EA](#7-dừng-ea)
-10. [Chế độ Đánh theo % tài khoản](#chế-độ-đánh-theo--tài-khoản)
+10. [Chế độ Đánh theo % tài khoản](#chế-độ-đánh-theo--tài-khoản) — gồm [Giải thích hai thông số: Tỷ lệ và Giới hạn](#giải-thích-hai-thông-số-tỷ-lệ-và-giới-hạn)
 11. [Luồng xử lý và ưu tiên](#luồng-xử-lý-và-ưu-tiên)
 12. [So với bản đầy đủ](#so-với-bản-đầy-đủ)
 13. [Yêu cầu và cài đặt](#yêu-cầu-và-cài-đặt)
@@ -56,8 +56,8 @@ Các nhóm input hiển thị theo thứ tự:
 | **Comment** | string | Comment trên lệnh; EA tự thêm hậu tố `" B"` (ví dụ: "Grid Stop V1 B"). |
 | **Gửi push notification khi EA reset/dừng** | bool | Bật: gửi thông báo đến điện thoại khi EA reset hoặc dừng (cần bật push trong MT5: Tools → Options → Notifications). |
 | **Đánh theo % tài khoản** | bool | **Bật:** Vốn gốc = vốn (Equity) lúc **thêm EA vào biểu đồ** (chỉ lưu một lần). Sau mỗi lần EA reset hoặc khởi động lại, so sánh vốn hiện tại với vốn gốc → tính hệ số áp dụng cho 5 giá trị (lot + 4 ngưỡng USD). **Tắt:** Luôn dùng đúng giá trị input, không scale. |
-| **Tỷ lệ tăng theo vốn (%)** | int | Chỉ áp dụng khi bật **Đánh theo % tài khoản**. **100** = tăng đủ theo vốn. **50** = vốn tăng 100% thì các hàm số chỉ tăng 50%. **Tối đa 100%**: cài >100 cũng chỉ dùng 100%. |
-| **Giới hạn tăng tối đa (%)** | double | Chỉ áp dụng khi bật **Đánh theo % tài khoản**. Giới hạn tăng lot và các hàm số. **0** hoặc **>10000** = tối đa **10.000%**. Cài 1–10.000 thì dùng đúng giá trị; cài >10.000 cũng chỉ 10.000%. |
+| **Tỷ lệ tăng theo vốn (%)** | int | Xem [Giải thích hai thông số](#giải-thích-hai-thông-số-tỷ-lệ-và-giới-hạn) bên dưới. **Giới hạn cao nhất 100%** — cài hơn cũng chỉ 100%. |
+| **Giới hạn tăng lot/hàm số (%)** | double | Xem [Giải thích hai thông số](#giải-thích-hai-thông-số-tỷ-lệ-và-giới-hạn) bên dưới. **Tối đa 10.000%** — cài 0 hoặc >10.000 đều chỉ 10.000%. |
 
 ---
 
@@ -155,18 +155,37 @@ Khi bật **Đánh theo % tài khoản** (trong Cài đặt chung):
 - **Thêm EA vào biểu đồ** (lần đầu): Equity lúc đó được lưu làm **vốn gốc** (một lần duy nhất, lưu trong GlobalVariable theo Magic). Lúc này các hàm số dùng đúng giá trị input (hệ số = 1).
 - **Vốn gốc không đổi** khi EA reset: mỗi lần reset hoặc khởi động lại, so sánh **vốn hiện tại** với **vốn gốc** (vốn lúc thêm EA), **không** cập nhật vốn gốc.
 
+### Giải thích hai thông số: Tỷ lệ và Giới hạn
+
+#### 1. Tỷ lệ tăng theo vốn (%)
+
+- **Ý nghĩa:** Khi vốn tăng, lot và 4 ngưỡng USD **chỉ được tăng theo một phần** của mức tăng vốn. Thông số này quy định phần đó là bao nhiêu %.
+- **100%** = tăng **đủ theo vốn**: vốn tăng bao nhiêu % thì các hàm số tăng bấy nhiêu %. VD: vốn x2 (+100%) → lot và ngưỡng x2.
+- **50%** = tăng **một nửa** so với vốn: vốn tăng 100% thì các hàm số chỉ tăng 50%. VD: vốn x2 → lot và ngưỡng x1,5.
+- **30%** = vốn tăng 100% thì các hàm số chỉ tăng 30% (hệ số = 1,3).
+
+**Giới hạn:** **Cao nhất là 100%.** Cài 150, 200 hay bất kỳ số nào lớn hơn 100 thì EA **cũng chỉ dùng 100%** — không bao giờ vượt 100%.
+
+#### 2. Giới hạn tăng lot / các hàm số (%)
+
+- **Ý nghĩa:** Dù vốn tăng rất lớn, lot và 4 ngưỡng USD **không được tăng quá** một mức % so với giá trị gốc. Đây là **trần cứng** (tối đa +X%).
+- **100** = tối đa tăng 100% → hệ số tối đa = 2 (lot/ngưỡng tối đa x2).
+- **0** = dùng **trần mặc định 10.000%** (hệ số tối đa = 101).
+- **1–10.000** = dùng đúng số % bạn cài (VD 500 = tối đa +500%, hệ số tối đa = 6).
+
+**Giới hạn:** **Cao nhất là 10.000%.** Cài **0** hoặc **lớn hơn 10.000** thì EA **cũng chỉ áp dụng tối đa 10.000%** — không bao giờ vượt 10.000%.
+
+---
+
 ### Công thức
 
 1. **Hệ số thô:** `scale_raw = Vốn hiện tại / Vốn gốc` (nếu chưa có vốn gốc thì coi scale_raw = 1).
 2. **Tỷ lệ tăng theo vốn (Rate %):**  
    `scale = 1 + (scale_raw − 1) × (Rate / 100)`  
-   - Rate = 100 → scale = scale_raw (tăng đủ theo vốn).  
-   - Rate = 50 → vốn tăng 100% (scale_raw = 2) → scale = 1,5 (các hàm số tăng 50%).  
-   - Rate = 30 → vốn tăng 100% → scale = 1,3 (các hàm số tăng 30%).
+   — Rate bị giới hạn **tối đa 100%** (cài >100 vẫn chỉ 100).
 3. **Giới hạn tăng tối đa (MaxIncrease %):**  
-   MaxIncrease = 0 hoặc >10000 → dùng 10.000%; 1–10.000 → dùng đúng giá trị; >10.000 → chỉ 10.000%.  
-   `scale = min(scale, 1 + MaxIncrease/100)` (tối đa scale = 101 tương ứng +10.000%).  
-   VD MaxIncrease = 100% → scale tối đa = 2 (các hàm số tối đa tăng 100%).
+   MaxIncrease ≤ 0 hoặc >10000 → dùng 10.000%; 1–10.000 → dùng đúng giá trị; >10.000 → chỉ 10.000%.  
+   `scale = min(scale, 1 + MaxIncrease/100)` (trần scale tương ứng, tối đa 101 = +10.000%).
 
 ### Năm giá trị được scale
 
