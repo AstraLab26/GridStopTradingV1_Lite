@@ -4,7 +4,15 @@
 //+------------------------------------------------------------------+
 #property copyright "Grid Stop Trading"
 #property version   "1.0"
-#property description "Lite: chỉ lệnh Stop (lot cố định). Gồng lãi tổng theo lệnh mở. Dừng/Reset theo âm USD."
+#property description "Grid Stop Trading - Bản Lite 1.0"
+#property description " "
+#property description "Giới thiệu:"
+#property description "- Chỉ lệnh Stop (lot cố định), không TP từng lệnh. Gồng lãi từng lệnh luôn bật."
+#property description "- Gồng lãi tổng theo lệnh mở: lãi lệnh mở đạt ngưỡng → đặt SL, gồng step; chạm SL → Dừng hoặc Reset EA."
+#property description "- Dừng/Reset theo âm USD (không SL % lỗ)."
+#property description " "
+#property description "Thông số mặc định gợi ý cho BTC/USD (vốn 50.000 USD hoặc 50.000 cent):"
+#property description "Lưới 1500 pips, 10 bậc. Lot 1. Gồng từng lệnh: 300/100 pips. Trading Stop Tổng: 120/100 USD, điểm A 2000, step 1000. Cân bằng: 3 bậc, 150 USD. SL âm 3000 USD (hoặc 3000 cent)."
 
 #include <Trade\Trade.mqh>
 
@@ -19,36 +27,36 @@ enum ENUM_TP_ACTION
 input group "=== CÀI ĐẶT CHUNG ==="
 input int MagicNumber = 123456;                 // Magic number (phân biệt lệnh EA với lệnh tay/EA khác)
 input string CommentOrder = "Grid Stop V1";     // Comment trên lệnh (sẽ thêm " B")
-input bool EnableResetNotification = false;     // Gửi push notification khi EA reset/dừng
-input bool ScaleByAccountPercent = false;        // Đánh theo % tài khoản: vốn gốc = vốn lúc thêm EA; mỗi lần reset so sánh vốn hiện tại với vốn gốc
-input int ScaleByAccountPercentRate = 100;       // Tỷ lệ tăng theo vốn (%): 100=tăng đủ, 50=vốn tăng 100% thì hàm số tăng 50%. Giới hạn cao nhất 100% - để hơn cũng chỉ 100%
-input double ScaleByAccountPercentMaxIncrease = 100.0;  // Giới hạn tăng lot/hàm số (%): 0 hoặc >10000 = tối đa 10000%. Cài 1-10000 thì dùng giá trị đó; cài >10000 cũng chỉ 10000%
+input bool EnableResetNotification = true;      // Gửi push notification khi EA reset/dừng
+input bool ScaleByAccountPercent = true;        // Đánh theo % tài khoản: vốn gốc = vốn lúc thêm EA; mỗi lần reset so sánh vốn hiện tại với vốn gốc
+input int ScaleByAccountPercentRate = 100;       // Tỷ lệ tăng theo vốn (%): mặc định 100. 100=tăng đủ, 50=vốn tăng 100% thì hàm số tăng 50%. Giới hạn cao nhất 100%
+input double ScaleByAccountPercentMaxIncrease = 0;      // Giới hạn tăng lot/hàm số (%): mặc định 0 (= trần 10000%). Cài 1-10000 dùng đúng; 0 hoặc >10000 = tối đa 10000%
 
 //--- Input parameters - Cài đặt lưới
 input group "=== CÀI ĐẶT LƯỚI ==="
-input double GridDistancePips = 20.0;           // Khoảng cách lưới cố định (pips): bậc 1=x, bậc 2=2x, bậc 3=3x...
+input double GridDistancePips = 1500.0;        // Khoảng cách lưới cố định (pips): bậc 1=x, bậc 2=2x, bậc 3=3x...
 input int MaxGridLevelsStopB = 10;              // Số bậc lưới tối đa mỗi chiều (1-100)
 
 //--- Input parameters - Cài đặt lệnh Stop
 input group "=== CÀI ĐẶT LỆNH STOP ==="
-input double LotSizeStopB = 0.01;               // Lot cố định cho mọi bậc
-input double TradingStopStopBDistancePips = 10.0;  // Gồng lãi từng lệnh: khi giá cách entry X pips → đặt SL hòa vốn
-input double TradingStopStopBStepPips = 5.0;   // Mỗi X pips giá đi thêm → dịch SL (gồng lãi từng lệnh)
+input double LotSizeStopB = 1.0;                // Lot cố định cho mọi bậc
+input double TradingStopStopBDistancePips = 300.0;  // Gồng lãi từng lệnh: khi giá cách entry X pips → đặt SL hòa vốn
+input double TradingStopStopBStepPips = 100.0;  // Mỗi X pips giá đi thêm → dịch SL (gồng lãi từng lệnh)
 
 //--- Input parameters - Trading Stop Step Tổng (gồng lãi theo lệnh mở)
 input group "=== TRADING STOP STEP TỔNG (GỒNG LÃI THEO LỆNH MỞ) ==="
-input bool EnableTradingStopStepTotal = false;  // Bật: lãi lệnh mở ≥ ngưỡng → đặt SL, dịch SL theo step
-input double TradingStopStepTotalProfit = 50.0; // Lãi lệnh đang mở ≥ X USD → kích hoạt (0=tắt)
-input double TradingStopStepReturnProfitOpen = 20.0; // Hủy gồng nếu lãi lệnh mở < X USD (chưa kéo SL)
-input double TradingStopStepPointA = 10.0;     // Điểm A (pips): SL cách lệnh dương gần nhất X pips
-input double TradingStopStepSize = 5.0;        // Step (pips): giá đi thêm X pips → dịch SL
-input ENUM_TP_ACTION ActionOnTradingStopStepComplete = TP_ACTION_STOP_EA; // Khi giá chạm SL: 0=Dừng EA, 1=Reset EA
+input bool EnableTradingStopStepTotal = true;   // Bật: lãi lệnh mở ≥ ngưỡng → đặt SL, dịch SL theo step
+input double TradingStopStepTotalProfit = 120.0; // Lãi lệnh đang mở ≥ X USD → kích hoạt (0=tắt)
+input double TradingStopStepReturnProfitOpen = 100.0; // Hủy gồng nếu lãi lệnh mở < X USD (chưa kéo SL)
+input double TradingStopStepPointA = 2000.0;   // Điểm A (pips): SL cách lệnh dương gần nhất X pips
+input double TradingStopStepSize = 1000.0;     // Step (pips): giá đi thêm X pips → dịch SL
+input ENUM_TP_ACTION ActionOnTradingStopStepComplete = TP_ACTION_RESET_EA; // Khi giá chạm SL: 0=Dừng EA, 1=Reset EA
 
 //--- Input parameters - Cân bằng lệnh
 input group "=== CÂN BẰNG LỆNH ==="
-input bool EnableBalanceResetMode = false;      // Bật: đạt CẢ hai điều kiện → đóng hết, đặt gốc mới
+input bool EnableBalanceResetMode = true;       // Bật: đạt CẢ hai điều kiện → đóng hết, đặt gốc mới
 input int BalanceResetMinGridLevelsWithOpen = 3;  // Điều kiện 1 (ĐK lưới): Số bậc lưới có lệnh đang mở ≥ X (0=bỏ qua)
-input double BalanceResetSessionProfitUSD = 50.0; // Điều kiện 2: Lãi phiên ≥ X USD (0=bỏ qua)
+input double BalanceResetSessionProfitUSD = 150.0; // Điều kiện 2: Lãi phiên ≥ X USD (0=bỏ qua)
 
 //--- Input parameters - Giờ hoạt động
 input group "=== GIỜ HOẠT ĐỘNG ==="
@@ -62,9 +70,9 @@ input int EndMinute = 59;                       // Phút kết thúc (0-59)
 input group "=== DỪNG EA ==="
 input bool EnableStopEAAtAccumulatedProfit = false; // Dừng EA khi tích lũy (Balance - Balance lúc bật) ≥ ngưỡng
 input double StopEAAtAccumulatedProfitUSD = 0;  // Ngưỡng tích lũy (USD). 0=tắt
-input bool EnableStopEAAtLossUSD = false;       // Dừng/Reset khi phiên lỗ ≥ X USD (so vốn khởi động / sau reset)
-input double StopEALossUSD = 100.0;             // Lỗ phiên (USD): VD 100 = kích hoạt khi Equity ≤ vốn - 100
-input ENUM_TP_ACTION StopEAAtLossUSDAction = TP_ACTION_STOP_EA; // Khi kích hoạt SL âm USD: 0=Dừng EA, 1=Reset EA
+input bool EnableStopEAAtLossUSD = true;        // Dừng/Reset khi phiên lỗ ≥ X USD (so vốn khởi động / sau reset)
+input double StopEALossUSD = 3000.0;            // Lỗ phiên (USD): VD 3000 = kích hoạt khi Equity ≤ vốn - 3000
+input ENUM_TP_ACTION StopEAAtLossUSDAction = TP_ACTION_RESET_EA; // Khi kích hoạt SL âm USD: 0=Dừng EA, 1=Reset EA
 
 //--- Global variables
 CTrade trade;
