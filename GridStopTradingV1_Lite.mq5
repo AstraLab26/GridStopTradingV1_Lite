@@ -2541,17 +2541,19 @@ void SendResetNotification(string resetReason, double accumulatedBefore, double 
    // 5. Số lot lớn nhất / tổng lot lớn nhất
    string lotText = DoubleToString(maxLotEver, 2) + " / " + DoubleToString(totalLotEver, 2);
    
-   // 6. Tích lũy với số lần
-   string accumulatedText = "Tích lũy lần " + IntegerToString(resetNumber) + ": " + FormatMoney(accumulatedBefore) + " + " + FormatMoney(profitThisTime) + " = " + FormatMoney(accumulatedAfter);
+   // 6. Tích lũy với số lần và % (ngắn gọn)
+   double accumulatedPercent = (initialBalanceAtStart > 0) ? (accumulatedAfter / initialBalanceAtStart * 100.0) : 0.0;
+   string percentStr = (accumulatedAfter >= 0) ? (" (+" + DoubleToString(accumulatedPercent, 2) + "%)") : (" (" + DoubleToString(accumulatedPercent, 2) + "%)");
+   string accumulatedText = "Tích lũy lần " + IntegerToString(resetNumber) + ": " + FormatMoney(accumulatedAfter) + percentStr;
    
    // Tạo nội dung thông báo
    string message = "EA RESET\n";
    message += "Biểu đồ: " + symbolName + "\n";
    message += "Chức năng: " + functionName + "\n";
-   message += "Số dư: " + balanceText + "\n";
+   message += "Số dư hiện tại: " + balanceText + "\n";
    message += accumulatedText + "\n";
    message += "Lỗ lớn nhất: " + maxLossText + "\n";
-   message += "Lot: " + lotText;
+   message += "Lot lớn nhất/tổng lot: " + lotText;
    
    // Gửi thông báo
    SendNotification(message);
