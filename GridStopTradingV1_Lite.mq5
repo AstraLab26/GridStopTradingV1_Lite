@@ -30,12 +30,12 @@ input string CommentOrder = "Grid Stop V1";     // Comment trên lệnh (sẽ th
 input bool EnableResetNotification = true;      // Gửi push notification khi EA reset/dừng
 input bool ScaleByAccountPercent = true;        // Đánh theo % tài khoản: so sánh vốn hiện tại với vốn gốc → % tăng/giảm để tính lot và 4 ngưỡng USD
 input double ScaleByAccountRefEquity = 50000;  // Vốn gốc (0=tự lấy vốn lúc thêm EA). Cài >0: VD 50000 cent → EA so sánh vốn hiện tại với 50000, vốn giảm 20% thì lot/hàm số giảm 20% theo
-input int ScaleByAccountPercentRate = 100;       // Tỷ lệ tăng theo vốn (%): mặc định 100. 100=tăng đủ, 50=vốn tăng 100% thì hàm số tăng 50%. Giới hạn cao nhất 100%
+input int ScaleByAccountPercentRate = 85;       // Tỷ lệ tăng theo vốn (%): mặc định 100. 100=tăng đủ, 50=vốn tăng 100% thì hàm số tăng 50%. Giới hạn cao nhất 100%
 input double ScaleByAccountPercentMaxIncrease = 0;      // Giới hạn tăng lot/hàm số (%): mặc định 0 (= trần 10000%). Cài 1-10000 dùng đúng; 0 hoặc >10000 = tối đa 10000%
 
 //--- Input parameters - Cài đặt lưới
 input group "=== CÀI ĐẶT LƯỚI ==="
-input double GridDistancePips = 1500.0;        // Khoảng cách lưới cố định (pips): bậc 1=x, bậc 2=2x, bậc 3=3x...
+input double GridDistancePips = 1000.0;        // Khoảng cách lưới cố định (pips): bậc 1=x, bậc 2=2x, bậc 3=3x...
 input int MaxGridLevelsStopB = 50;              // Số bậc lưới tối đa mỗi chiều (1-100)
 
 //--- Input parameters - Cài đặt lệnh Stop
