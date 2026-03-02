@@ -316,7 +316,28 @@ Khi bật **Gửi push notification khi EA reset/dừng**, tin nhắn gửi khi:
 - **Reset do Trading Stop** (giá chạm SL → Reset EA)
 - **Dừng/Reset do SL âm USD**
 
-Nội dung: Biểu đồ (symbol), Chức năng (lý do reset/dừng), Số dư, Tích lũy (lần N: trước + lần này = sau), Lỗ lớn nhất (số tiền / vốn %), Lot (max/tổng). Đơn vị tiền format K/M (vd. 12.50K$).
+**Ví dụ tin nhắn đầy đủ:**
+
+```
+EA RESET
+Biểu đồ: EURUSD
+Chức năng: Gồng lãi
+Số dư hiện tại: 1.10K$
+Tích lũy lần 1: 100.00$ (+10.00%)
+Lỗ lớn nhất: -50.00$ / 1.05K$ (4.76%)
+Lot lớn nhất/tổng lot: 0.10 / 0.50
+```
+
+**Giải thích:**
+
+| Thành phần | Ý nghĩa |
+|------------|---------|
+| **Biểu đồ** | Cặp tiền đang giao dịch |
+| **Chức năng** | Lý do reset: Gồng lãi, Cân bằng lệnh, Trading Stop Step Tổng, SL âm USD - Reset EA, v.v. |
+| **Số dư hiện tại** | Balance hiện tại (FormatMoney: K = nghìn, M = triệu) |
+| **Tích lũy lần N** | Tổng lãi/lỗ từ lúc thêm EA vào biểu đồ + % so vốn ban đầu. Công thức: `Balance hiện tại - Balance lúc thêm EA` |
+| **Lỗ lớn nhất** | Số âm lớn nhất từng có / Balance tại thời điểm đó / % so vốn |
+| **Lot lớn nhất/tổng lot** | Lot lớn nhất từng mở / Tổng lot lớn nhất từng có |
 
 ### Giá trị mặc định trong EA
 
